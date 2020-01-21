@@ -6,6 +6,7 @@ import com.mapbox.annotation.navigation.module.MapboxNavigationModuleType
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.navigation.base.route.Router
+import com.mapbox.navigation.utils.network.NetworkStatus
 import com.mapbox.navigation.utils.network.NetworkStatusService
 import com.mapbox.navigation.utils.thread.ThreadController
 import com.mapbox.navigation.utils.thread.monitorChannelWithException
@@ -20,11 +21,23 @@ class MapboxHybridRouter(
 
     private val networkStatusService = NetworkStatusService(context)
     private val jobControl = ThreadController.getIOScopeAndRootJob()
-    private val offBoardRouterHandler: RouterHandler by lazy {
+    private val offboardRouterHandler: RouterHandler by lazy {
         RouterHandler(mainRouter = offboardRouter, reserveRouter = onboardRouter)
     }
-    private val onBoardRouterHandler: RouterHandler by lazy {
+    private val onboardRouterHandler: RouterHandler by lazy {
         RouterHandler(mainRouter = onboardRouter, reserveRouter = offboardRouter)
+    }
+
+    // internal for testing
+    internal suspend fun onNetworkStatusUpdated(networkStatus: NetworkStatus) {
+        when (networkStatus.isNetworkAvailable) {
+            true -> {
+                routeDispatchHandler.set(offboardRouterHandler)
+            }
+            false -> {
+                routeDispatchHandler.set(onboardRouterHandler)
+            }
+        }
     }
 
     /**
@@ -32,7 +45,7 @@ class MapboxHybridRouter(
      * Internet availability determines which one.
      */
     private val routeDispatchHandler: AtomicReference<RouterDispatchInterface> =
-        AtomicReference(offBoardRouterHandler)
+        AtomicReference(offboardRouterHandler)
 
     /**
      * At init time, the network monitor is setup. isNetworkAvailable represents the current network state. Based
@@ -40,17 +53,8 @@ class MapboxHybridRouter(
      */
     init {
         jobControl.scope.monitorChannelWithException(
-            networkStatusService.getNetworkStatusChannel()
-        ) { networkStatus ->
-            when (networkStatus.isNetworkAvailable) {
-                true -> {
-                    routeDispatchHandler.set(offBoardRouterHandler)
-                }
-                false -> {
-                    routeDispatchHandler.set(onBoardRouterHandler)
-                }
-            }
-        }
+            networkStatusService.getNetworkStatusChannel(), ::onNetworkStatusUpdated
+        )
     }
 
     /**

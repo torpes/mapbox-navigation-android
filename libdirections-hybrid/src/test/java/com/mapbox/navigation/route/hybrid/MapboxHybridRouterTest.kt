@@ -1,10 +1,8 @@
 package com.mapbox.navigation.route.hybrid
 
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
-import android.net.NetworkInfo
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.geojson.Point
 import com.mapbox.navigation.base.extensions.applyDefaultParams
@@ -12,6 +10,7 @@ import com.mapbox.navigation.base.extensions.coordinates
 import com.mapbox.navigation.base.route.Router
 import com.mapbox.navigation.route.offboard.MapboxOffboardRouter
 import com.mapbox.navigation.route.onboard.MapboxOnboardRouter
+import com.mapbox.navigation.utils.network.NetworkStatus
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -37,18 +36,14 @@ class MapboxHybridRouterTest {
     private val offboardRouter: MapboxOffboardRouter = mockk(relaxUnitFun = true)
     private val context: Context = mockk(relaxUnitFun = true)
     private val connectivityManager: ConnectivityManager = mockk(relaxUnitFun = true)
-    private val intent: Intent = mockk(relaxUnitFun = true)
-    private val networkInfo: NetworkInfo = mockk(relaxUnitFun = true)
     private val routerCallback: Router.Callback = mockk(relaxUnitFun = true)
     private val routerOptions: RouteOptions = provideDefaultRouteOptions()
-    private val receiver = slot<BroadcastReceiver>()
     private val internalCallback = slot<Router.Callback>()
 
     @Before
     fun setUp() {
         every { context.getSystemService(Context.CONNECTIVITY_SERVICE) } returns connectivityManager
-        every { connectivityManager.activeNetworkInfo } returns networkInfo
-        every { context.registerReceiver(capture(receiver), any()) } returns intent
+        every { context.registerReceiver(any(), any()) } returns Intent()
         every { onboardRouter.getRoute(routerOptions, capture(internalCallback)) } answers {}
         every { offboardRouter.getRoute(routerOptions, capture(internalCallback)) } answers {}
         hybridRouter = MapboxHybridRouter(onboardRouter, offboardRouter, context)
@@ -164,16 +159,12 @@ class MapboxHybridRouterTest {
         verify(exactly = 1) { onboardRouter.getRoute(routerOptions, capture(internalCallback)) }
     }
 
-    private fun enableNetworkConnection() = networkConnected(true)
+    private suspend fun enableNetworkConnection() = networkConnected(true)
 
-    private fun disableNetworkConnection() = networkConnected(false)
+    private suspend fun disableNetworkConnection() = networkConnected(false)
 
-    private fun networkConnected(networkConnected: Boolean) {
-        every { networkInfo.isConnectedOrConnecting } returns networkConnected
-
-        receiver.captured.onReceive(context, Intent())
-
-        Thread.sleep(1000)
+    private suspend fun networkConnected(networkConnected: Boolean) {
+        hybridRouter.onNetworkStatusUpdated(NetworkStatus(networkConnected))
     }
 
     private fun provideDefaultRouteOptions(): RouteOptions {
