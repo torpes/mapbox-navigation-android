@@ -5,17 +5,11 @@ import org.junit.Assert.*
 import android.content.Context
 import android.os.Bundle
 import androidx.test.core.app.ApplicationProvider
-import com.mapbox.android.accounts.navigation.sku.v1.TripsSku
 import com.mapbox.android.accounts.v1.AccountsConstants
-import org.hamcrest.CoreMatchers.`is`
 import org.junit.After
-import org.junit.Assert.assertThat
 import org.junit.Before
-import org.junit.FixMethodOrder
-import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.junit.runners.MethodSorters
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -52,14 +46,11 @@ class MapboxNavigationAccountsTest {
 
     @Test
     fun obtainSkuToken_when_resourceUrl_null() {
-
-
         val instance = MapboxNavigationAccounts.getInstance(ctx)
 
         val result = instance.obtainSkuToken(null, 4)
 
         assertNotNull(result)
-        //assertThat(result, `is`("myTestToken"))//107bkJpaRxZu9
     }
 
     @Test
@@ -68,7 +59,7 @@ class MapboxNavigationAccountsTest {
 
         val result = instance.obtainSkuToken("", 4)
 
-        assertThat(result, `is`("myTestToken"))
+        assertEquals("myTestToken", result)
     }
 
     @Test
@@ -77,47 +68,39 @@ class MapboxNavigationAccountsTest {
 
         val result = instance.obtainSkuToken("http://www.mapbox.com", -1)
 
-        assertThat(result, `is`("myTestToken"))
+        assertEquals("myTestToken", result)
     }
 
     @Test
     fun obtainSkuToken_when_resourceUrl_notNullOrEmpty_and_BillingModel_TRIPS() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
-
-//        ctx.applicationInfo.metaData = Bundle().also {
-//            it.putBoolean(AccountsConstants.KEY_META_DATA_MANAGE_SKU, true)
-//        }
-
         val instance = MapboxNavigationAccounts.getInstance(ctx)
 
         val result = instance.obtainSkuToken("http://www.mapbox.com", 5)
 
-        assertThat(result, `is`("http://www.mapbox.com&sku=myTestToken"))
+        assertEquals("http://www.mapbox.com&sku=myTestToken", result)
     }
 
     @Test
     fun obtainSkuToken_when_resourceUrl_notNullOrEmpty_and_BillingModel_MAU() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
-
         ctx.applicationInfo.metaData = Bundle().also {
             it.putBoolean(AccountsConstants.KEY_META_DATA_MANAGE_SKU, false)
         }
-
         val instance = MapboxNavigationAccounts.getInstance(ctx)
 
         val result = instance.obtainSkuToken("http://www.mapbox.com", 5)
 
-        assertThat(result, `is`("http://www.mapbox.com&sku=myTestToken"))
+        assertEquals("http://www.mapbox.com&sku=myTestToken", result)
     }
 
     @Test
     fun obtainSkuToken_when_resourceUrl_notNullOrEmpty_and_BillingModel_default() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
-
         val instance = MapboxNavigationAccounts.getInstance(ctx)
 
         val result = instance.obtainSkuToken("http://www.mapbox.com", 5)
 
-        assertThat(result, `is`("http://www.mapbox.com&sku=myTestToken"))
+        assertEquals("http://www.mapbox.com&sku=myTestToken", result)
     }
 }
