@@ -20,8 +20,48 @@
         android:src="@drawable/ic_maneuver_arrive"
         android:tint="@android:color/white"/>
 
+    <LinearLayout
+        android:id="@+id/estimationBlock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_alignTop="@id/maneuverImage"
+        android:layout_marginTop="4dp"
+        android:layout_toEndOf="@id/maneuverImage"
+        android:layout_toRightOf="@id/maneuverImage">
+
+        <TextView
+            android:id="@+id/notificationDistanceText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:lines="1"
+            android:textColor="@android:color/white"
+            tools:text="250 ft"/>
+
+        <ImageView
+            android:id="@+id/dot"
+            android:layout_width="4dp"
+            android:layout_height="4dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginLeft="8dp"
+            android:layout_gravity="center_vertical"
+            android:src="@drawable/ic_circle"
+            android:tint="@android:color/white"/>
+
+        <TextView
+            android:id="@+id/notificationArrivalText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_marginLeft="8dp"
+            android:lines="1"
+            android:textColor="@android:color/white"
+            tools:text="11:13 AM ETA"/>
+
+    </LinearLayout>
+
     <TextView
-        android:id="@+id/notificationDistanceText"
+        android:id="@+id/freeDriveText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignTop="@id/maneuverImage"
@@ -30,34 +70,8 @@
         android:layout_toRightOf="@id/maneuverImage"
         android:lines="1"
         android:textColor="@android:color/white"
-        tools:text="250 ft"/>
-
-    <ImageView
-        android:id="@+id/dot"
-        android:layout_width="4dp"
-        android:layout_height="4dp"
-        android:layout_alignTop="@id/notificationDistanceText"
-        android:layout_alignBottom="@id/notificationDistanceText"
-        android:layout_marginStart="8dp"
-        android:layout_marginLeft="8dp"
-        android:layout_toEndOf="@id/notificationDistanceText"
-        android:layout_toRightOf="@id/notificationDistanceText"
-        android:src="@drawable/ic_circle"
-        android:tint="@android:color/white"/>
-
-    <TextView
-        android:id="@+id/notificationArrivalText"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignTop="@id/notificationDistanceText"
-        android:layout_alignBottom="@id/notificationDistanceText"
-        android:layout_marginStart="8dp"
-        android:layout_marginLeft="8dp"
-        android:layout_toEndOf="@+id/dot"
-        android:layout_toRightOf="@+id/dot"
-        android:lines="1"
-        android:textColor="@android:color/white"
-        tools:text="11:13 AM ETA"/>
+        android:text="@string/free_drive_notification_text"
+        android:visibility="gone"/>
 
     <TextView
         android:id="@+id/notificationInstructionText"

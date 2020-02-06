@@ -11,7 +11,10 @@ import android.content.IntentFilter
 import android.os.Build
 import android.text.SpannableString
 import android.text.format.DateFormat
+import android.view.View.GONE
+import android.view.View.VISIBLE
 import android.widget.RemoteViews
+import androidx.annotation.DrawableRes
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.mapbox.annotation.navigation.module.MapboxNavigationModule
@@ -214,13 +217,21 @@ class MapboxTripNotification constructor(
     }
 
     private fun updateNotificationViews(routeProgress: RouteProgress) {
-        updateInstructionText(routeProgress.bannerInstructions())
-        updateDistanceText(routeProgress)
-        generateArrivalTime(routeProgress, Calendar.getInstance())?.let { formattedTime ->
-            updateViewsWithArrival(formattedTime)
-            val step = routeProgress.currentLegProgress()?.upcomingStep()
-            step?.let { updateManeuverImage(it) }
-        }
+        routeProgress.route()?.let {
+            setFreeDriveMode(false)
+            updateInstructionText(routeProgress.bannerInstructions())
+            updateDistanceText(routeProgress)
+            generateArrivalTime(routeProgress, Calendar.getInstance())?.let { formattedTime ->
+                updateViewsWithArrival(formattedTime)
+                routeProgress.currentLegProgress()?.upcomingStep()?.let { step ->
+                    val maneuverImageId = getManeuverResource(step)
+                    if (maneuverImageId != currentManeuverId) {
+                        currentManeuverId = maneuverImageId
+                        updateManeuverImageResource(maneuverImageId)
+                    }
+                }
+            }
+        } ?: setFreeDriveMode(true)
     }
 
     private fun updateInstructionText(bannerInstruction: BannerInstructions?) {
@@ -228,10 +239,12 @@ class MapboxTripNotification constructor(
             val primaryText = bannerIns.primary().text()
             if (currentInstructionText.isNullOrEmpty() || currentInstructionText != primaryText) {
                 collapsedNotificationRemoteViews?.setTextViewText(
-                    R.id.notificationInstructionText, primaryText
+                    R.id.notificationInstructionText,
+                    primaryText
                 )
                 expandedNotificationRemoteViews?.setTextViewText(
-                    R.id.notificationInstructionText, primaryText
+                    R.id.notificationInstructionText,
+                    primaryText
                 )
                 currentInstructionText = primaryText
             }
@@ -298,21 +311,6 @@ class MapboxTripNotification constructor(
                 false
         } ?: false
 
-    private fun updateManeuverImage(legStep: LegStep) {
-        val maneuverImageId = getManeuverResource(legStep)
-        if (maneuverImageId != currentManeuverId) {
-            currentManeuverId = maneuverImageId
-            collapsedNotificationRemoteViews?.setImageViewResource(
-                R.id.maneuverImage,
-                maneuverImageId
-            )
-            expandedNotificationRemoteViews?.setImageViewResource(
-                R.id.maneuverImage,
-                maneuverImageId
-            )
-        }
-    }
-
     private fun getManeuverResource(step: LegStep): Int {
         val stepManeuver = step.maneuver()
         val maneuverType = stepManeuver.type()
@@ -343,6 +341,53 @@ class MapboxTripNotification constructor(
             (STEP_MANEUVER_TYPE_ROUNDABOUT == maneuverType ||
                 STEP_MANEUVER_TYPE_ROTARY == maneuverType ||
                 STEP_MANEUVER_MODIFIER_UTURN == maneuverModifier)
+    }
+
+    private fun setFreeDriveMode(isFreeDriveMode: Boolean) {
+        updateEstimationBlockVisibility(isFreeDriveMode)
+        updateFreeDriveTextVisibility(isFreeDriveMode)
+        updateManeuverImageResource(R.drawable.ic_maneuver_turn_0)
+        updateEndNavigationBtnText(isFreeDriveMode)
+    }
+
+    private fun updateEstimationBlockVisibility(isFreeDriveMode: Boolean) {
+        collapsedNotificationRemoteViews?.setViewVisibility(
+            R.id.estimationBlock,
+            if (isFreeDriveMode) GONE else VISIBLE
+        )
+        expandedNotificationRemoteViews?.setViewVisibility(
+            R.id.estimationBlock,
+            if (isFreeDriveMode) GONE else VISIBLE
+        )
+    }
+
+    private fun updateFreeDriveTextVisibility(isFreeDriveMode: Boolean) {
+        collapsedNotificationRemoteViews?.setViewVisibility(
+            R.id.freeDriveText,
+            if (isFreeDriveMode) VISIBLE else GONE
+        )
+        expandedNotificationRemoteViews?.setViewVisibility(
+            R.id.freeDriveText,
+            if (isFreeDriveMode) VISIBLE else GONE
+        )
+    }
+
+    private fun updateManeuverImageResource(@DrawableRes maneuverResId: Int) {
+        collapsedNotificationRemoteViews?.setImageViewResource(
+            R.id.maneuverImage,
+            maneuverResId
+        )
+        expandedNotificationRemoteViews?.setImageViewResource(
+            R.id.maneuverImage,
+            maneuverResId
+        )
+    }
+
+    private fun updateEndNavigationBtnText(isFreeDriveMode: Boolean) {
+        expandedNotificationRemoteViews?.setTextViewText(
+            R.id.endNavigationBtnText,
+            applicationContext.getString(if (isFreeDriveMode) R.string.stop_session else R.string.end_navigation)
+        )
     }
 
     private fun onEndNavigationBtnClick() {
