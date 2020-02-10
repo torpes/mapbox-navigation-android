@@ -19,12 +19,16 @@ import com.mapbox.navigation.route.onboard.network.HttpClient
 import com.mapbox.navigation.utils.exceptions.NavigationException
 import com.mapbox.navigation.utils.thread.ThreadController
 import com.mapbox.navigator.RouterParams
+import com.mapbox.navigator.RouterResult
 import com.mapbox.navigator.TileEndpointConfiguration
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+// import kotlinx.coroutines.launch
+// import kotlinx.coroutines.withContext
 
 /**
  * MapboxOnboardRouter provides offline route fetching
@@ -57,7 +61,6 @@ class MapboxOnboardRouter : Router {
             tileDir.mkdirs()
         }
 
-        this.navigatorNative = MapboxNativeNavigatorImpl
         this.config = config
         this.logger = logger
         val httpClient = HttpClient()
@@ -75,7 +78,10 @@ class MapboxOnboardRouter : Router {
                     ""
                 )
             })
-        MapboxNativeNavigatorImpl.configureRouter(routerParams, httpClient)
+        this.navigatorNative = MapboxNativeNavigatorImpl(
+            routerParams = routerParams,
+            httpClient = httpClient
+        )
     }
 
     // Package private for testing purposes
@@ -124,29 +130,31 @@ class MapboxOnboardRouter : Router {
     }
 
     private fun retrieveRoute(url: String, callback: Router.Callback) {
-        mainJobControl.scope.launch {
+        // mainJobControl.scope.launch {
             try {
-                val routerResult = getRoute(url)
+                getRoute(url) { routerResult ->
+                    mainJobControl.scope.launch {
+                        val routes: List<DirectionsRoute> = try {
+                            parseDirectionsRoutes(routerResult.json)
+                        } catch (e: RuntimeException) {
+                            emptyList()
+                        }
 
-                val routes: List<DirectionsRoute> = try {
-                    parseDirectionsRoutes(routerResult.json)
-                } catch (e: RuntimeException) {
-                    emptyList()
-                }
+                        when {
+                            !routes.isNullOrEmpty() -> callback.onResponse(routes)
+                            else -> callback.onFailure(NavigationException(generateErrorMessage(routerResult.json)))
+                        }
+                    }
 
-                when {
-                    !routes.isNullOrEmpty() -> callback.onResponse(routes)
-                    else -> callback.onFailure(NavigationException(generateErrorMessage(routerResult.json)))
                 }
             } catch (e: CancellationException) {
                 callback.onCanceled()
             }
-        }
+        // }
     }
 
-    internal suspend fun getRoute(url: String) = withContext(ThreadController.IODispatcher) {
-        navigatorNative.getRoute(url)
-    }
+    internal fun getRoute(url: String, callback: (RouterResult) -> Unit) =
+        navigatorNative.getRoute(url, callback)
 
     private suspend fun parseDirectionsRoutes(json: String): List<DirectionsRoute> =
         withContext(ThreadController.IODispatcher) {
