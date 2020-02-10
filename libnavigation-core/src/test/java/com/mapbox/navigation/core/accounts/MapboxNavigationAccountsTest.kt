@@ -1,12 +1,12 @@
 package com.mapbox.navigation.core.accounts
 
-import org.junit.Assert.*
-
 import android.content.Context
 import android.os.Bundle
 import androidx.test.core.app.ApplicationProvider
 import com.mapbox.android.accounts.v1.AccountsConstants
 import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -14,7 +14,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest=Config.NONE)
+@Config(manifest = Config.NONE)
 class MapboxNavigationAccountsTest {
 
     val ctx = ApplicationProvider.getApplicationContext<Context>()
@@ -30,7 +30,6 @@ class MapboxNavigationAccountsTest {
                 Context.MODE_PRIVATE
         ).edit().putString("com.mapbox.navigation.accounts.trips.skutoken", "myTestToken")
                 .commit()
-
 
         ctx.getSharedPreferences(
                 AccountsConstants.MAPBOX_SHARED_PREFERENCES,

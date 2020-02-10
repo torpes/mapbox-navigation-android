@@ -9,14 +9,15 @@ import com.mapbox.navigation.base.typedef.IMPERIAL
 import com.mapbox.navigation.base.typedef.METRIC
 import com.mapbox.navigation.base.typedef.ROUNDING_INCREMENT_FIFTY
 import org.hamcrest.core.IsInstanceOf
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest= Config.NONE)
+@Config(manifest = Config.NONE)
 class MapboxDistanceFormatterTest {
 
     val ctx = ApplicationProvider.getApplicationContext<Context>()
@@ -30,9 +31,9 @@ class MapboxDistanceFormatterTest {
 
         assertEquals("12 mi", result.toString())
         assertEquals(2, result.getSpans(0, result.count(), Object::class.java).size)
-        assertThat(result.getSpans(0, result.count(), Object::class.java)[0], IsInstanceOf(StyleSpan::class.java) )
+        assertThat(result.getSpans(0, result.count(), Object::class.java)[0], IsInstanceOf(StyleSpan::class.java))
         assertEquals(Typeface.BOLD, (result.getSpans(0, result.count(), Object::class.java)[0] as StyleSpan).style)
-        assertThat(result.getSpans(0, result.count(), Object::class.java)[1], IsInstanceOf(RelativeSizeSpan::class.java) )
+        assertThat(result.getSpans(0, result.count(), Object::class.java)[1], IsInstanceOf(RelativeSizeSpan::class.java))
         assertEquals(0.65f, (result.getSpans(0, result.count(), Object::class.java)[1] as RelativeSizeSpan).sizeChange)
     }
 
@@ -73,9 +74,9 @@ class MapboxDistanceFormatterTest {
 
         val result = formatter.formatDistance(100.0)
 
-        assertThat(result.getSpans(0, result.count(), Object::class.java)[0], IsInstanceOf(StyleSpan::class.java) )
+        assertThat(result.getSpans(0, result.count(), Object::class.java)[0], IsInstanceOf(StyleSpan::class.java))
         assertEquals(Typeface.BOLD, (result.getSpans(0, result.count(), Object::class.java)[0] as StyleSpan).style)
-        assertThat(result.getSpans(0, result.count(), Object::class.java)[1], IsInstanceOf(RelativeSizeSpan::class.java) )
+        assertThat(result.getSpans(0, result.count(), Object::class.java)[1], IsInstanceOf(RelativeSizeSpan::class.java))
         assertEquals(0.65f, (result.getSpans(0, result.count(), Object::class.java)[1] as RelativeSizeSpan).sizeChange)
     }
 }
