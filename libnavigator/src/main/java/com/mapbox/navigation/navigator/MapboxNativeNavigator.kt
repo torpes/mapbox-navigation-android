@@ -25,7 +25,7 @@ interface MapboxNativeNavigator {
     // Route following
 
     fun updateLocation(rawLocation: Location): Boolean
-    fun updateSensor(sensorEvent: SensorEvent): Boolean
+    fun updateSensorEvent(sensorEvent: SensorEvent): Boolean
     fun getStatus(date: Date): TripStatus
 
     // Routing
