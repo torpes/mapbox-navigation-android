@@ -1,12 +1,12 @@
-package com.mapbox.navigation.metrics
+package com.mapbox.navigation.core
 
 import android.os.Parcel
 import com.google.gson.Gson
 import com.mapbox.android.telemetry.Event
 import com.mapbox.android.telemetry.MapboxTelemetry
-import com.mapbox.navigation.base.metrics.MetricEvent
-import com.mapbox.navigation.base.metrics.NavigationMetrics
-import com.mapbox.navigation.metrics.internal.utils.extensions.toTelemetryEvent
+import com.mapbox.navigation.core.metrics.MetricEvent
+import com.mapbox.navigation.core.metrics.NavigationMetrics
+import com.mapbox.navigation.core.metrics.internal.utils.extensions.toTelemetryEvent
 import com.mapbox.navigation.testing.MainCoroutineRule
 import com.mapbox.navigation.utils.thread.JobControl
 import com.mapbox.navigation.utils.thread.ThreadController
@@ -53,7 +53,7 @@ class MapboxMetricsReporterTest {
         val metricEvent = StubNavigationEvent(NavigationMetrics.ARRIVE)
         val event = metricEvent.toTelemetryEvent()
 
-        MapboxMetricsReporter.addEvent(metricEvent)
+        com.mapbox.navigation.core.metrics.MapboxMetricsReporter.addEvent(metricEvent)
 
         verify { mapboxTelemetry.push(event) }
         unmockkObject(ThreadController)
@@ -67,7 +67,7 @@ class MapboxMetricsReporterTest {
         val metricEvent = StubNavigationEvent("some_event")
         val event = metricEvent.toTelemetryEvent()
 
-        MapboxMetricsReporter.addEvent(metricEvent)
+        com.mapbox.navigation.core.metrics.MapboxMetricsReporter.addEvent(metricEvent)
 
         verify(exactly = 0) { mapboxTelemetry.push(event) }
         unmockkObject(ThreadController)

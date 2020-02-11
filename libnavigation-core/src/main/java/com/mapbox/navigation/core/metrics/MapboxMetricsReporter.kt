@@ -1,12 +1,8 @@
-package com.mapbox.navigation.metrics
+package com.mapbox.navigation.core.metrics
 
 import android.content.Context
 import com.google.gson.Gson
 import com.mapbox.android.telemetry.MapboxTelemetry
-import com.mapbox.navigation.base.metrics.MetricEvent
-import com.mapbox.navigation.base.metrics.MetricsObserver
-import com.mapbox.navigation.base.metrics.MetricsReporter
-import com.mapbox.navigation.metrics.internal.utils.extensions.toTelemetryEvent
 import com.mapbox.navigation.utils.thread.JobControl
 import com.mapbox.navigation.utils.thread.ThreadController
 import kotlinx.coroutines.cancelChildren
@@ -45,8 +41,8 @@ object MapboxMetricsReporter : MetricsReporter {
         mapboxTelemetry: MapboxTelemetry,
         threadController: ThreadController
     ) {
-        this.mapboxTelemetry = mapboxTelemetry
-        this.ioJobController = threadController.getMainScopeAndRootJob()
+        MapboxMetricsReporter.mapboxTelemetry = mapboxTelemetry
+        ioJobController = threadController.getMainScopeAndRootJob()
         mapboxTelemetry.enable()
     }
 
@@ -65,7 +61,6 @@ object MapboxMetricsReporter : MetricsReporter {
      * This method also removes metrics observer and stops background thread used for
      * events dispatching.
      */
-    @JvmStatic
     fun disable() {
         removeObserver()
         mapboxTelemetry.disable()
@@ -83,10 +78,10 @@ object MapboxMetricsReporter : MetricsReporter {
     }
 
     override fun setMetricsObserver(metricsObserver: MetricsObserver) {
-        this.metricsObserver = metricsObserver
+        MapboxMetricsReporter.metricsObserver = metricsObserver
     }
 
     override fun removeObserver() {
-        this.metricsObserver = null
+        metricsObserver = null
     }
 }

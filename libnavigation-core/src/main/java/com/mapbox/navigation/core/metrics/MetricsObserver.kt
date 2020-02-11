@@ -1,4 +1,4 @@
-package com.mapbox.navigation.base.metrics
+package com.mapbox.navigation.core.metrics
 
 /**
  * Interface for observe metric events handled.

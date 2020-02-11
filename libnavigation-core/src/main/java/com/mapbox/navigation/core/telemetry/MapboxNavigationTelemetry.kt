@@ -9,27 +9,31 @@ import com.mapbox.android.core.location.LocationEngineRequest
 import com.mapbox.android.core.location.LocationEngineResult
 import com.mapbox.android.telemetry.MapboxTelemetry
 import com.mapbox.android.telemetry.TelemetryUtils
+import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.navigation.base.extensions.ifNonNull
 import com.mapbox.navigation.base.logger.model.Message
 import com.mapbox.navigation.base.logger.model.Tag
 import com.mapbox.navigation.base.trip.model.RouteProgress
 import com.mapbox.navigation.core.MapboxNavigation
+import com.mapbox.navigation.core.metrics.MapboxMetricsReporter
+import com.mapbox.navigation.core.metrics.MetricEvent
+import com.mapbox.navigation.core.metrics.MetricsReporter
+import com.mapbox.navigation.core.metrics.toTelemetryEvent
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
 import com.mapbox.navigation.logger.MapboxLogger
 import com.mapbox.navigation.utils.exceptions.NavigationException
 import com.mapbox.navigation.utils.thread.ThreadController
 import com.mapbox.navigation.utils.thread.monitorChannelWithException
-import com.mapbox.navigation.utils.time.Time
 import java.util.Locale
-import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
-import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.TestOnly
 
 private enum class LocationBufferCommands {
@@ -50,16 +54,38 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
 
     private val TAG = Tag("MAPBOX_TELEMETRY")
     private const val LOCATION_BUFFER_MAX_SIZE = 40
-
     private const val TWENTY_SECOND_INTERVAL = 20000L
+    private var sessionId = ""
+    private var tripId = ""
     private val jobControl = ThreadController.getIOScopeAndRootJob()
     private val locationBuffer = mutableListOf<Location>()
+    private val channelEventQueue = Channel<MetricEvent>(Channel.UNLIMITED)
     private val channelLocationBuffer = Channel<LocationBufferControl>(LOCATION_BUFFER_MAX_SIZE)
     private val channelOnRouteProgress = Channel<RouteProgress>(Channel.CONFLATED) // we want just the last notification
     private val channelTelemetryEvent = Channel<MetricEvent>(Channel.CONFLATED) // used in testing to sample the events sent to the server
+
     private lateinit var cleanupJob: Job
     private lateinit var locationEngine: LocationEngine
+    private lateinit var mapboxTelemetry: MapboxTelemetry
 
+    private lateinit var gpsEventFactory: InitialGpsEventFactory
+    private val sessionControl: AtomicReference<SessionState> = AtomicReference(SessionState.SESSION_END)
+    private data class SessionData(
+        val sessionId: String,
+        val tripId: String,
+        val directionsRoute: DirectionsRoute,
+        val requestId: String,
+        var currentDirectionsRoute: DirectionsRoute,
+        var eventRouteDistanceCompleted: Float,
+        var rerouteCount: Int = 0
+    )
+
+    private enum class SessionState {
+        SESSION_START,
+        SESSION_END
+    }
+    private var sessionState: SessionState = SessionState.SESSION_END
+    private var sessionData: SessionData? = null
     // Call back that receives
     private val routeProgressListener = object : RouteProgressObserver {
         override fun onRouteProgressChanged(routeProgress: RouteProgress) {
@@ -84,7 +110,7 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
      * The lambda that is called if the SDK client did not initialize telemetry. If telemetry is not initialized
      * than all calls to post a telemetry event will fail with this exception
      */
-    private val postEventBeforeInit: (TelemetryEventInterface) -> Unit = { _: TelemetryEventInterface ->
+    private val postEventBeforeInit: (TelemetryEvent) -> Unit = { _: TelemetryEvent ->
         throw NavigationException("Telemetry must be initialized before calling this method. Call MapboxNavigationTelemetry.initialize()")
     }
 
@@ -92,7 +118,7 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
      * The lambda that is called once telemetry is initialized. This call will genearate a telemetry event. The call is
      * equivalent to postEvent()
      */
-    private val postEventAfterInit: (TelemetryEventInterface) -> Unit = { telemetryInterface -> postEvent(telemetryInterface) }
+    private val postEventAfterInit: (TelemetryEvent) -> Unit = { /*TODO:OZ call from TelemetryMetrics*/ }
 
     /**
      * The delegate lambda that distaches either a pre or after initialization logic
@@ -102,18 +128,19 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
     /**
      * One-time initializer. Called in response to initialize() and then replaced with a no-op lambda to prevent multiple initialize() calls
      */
-    private val primaryInitializer: (Context, String, MapboxNavigation, LocationEngine, MapboxTelemetry, LocationEngineRequest) -> Boolean = { context, token, mapboxNavigation, locationEngine, telemetry, locationEngineRequest ->
+    private val primaryInitializer: (Context, String, MapboxNavigation, LocationEngine, MapboxTelemetry, LocationEngineRequest, MetricsReporter) -> Boolean = { context, token, mapboxNavigation, locationEngine, telemetry, locationEngineRequest, metricsReporter ->
         this.context = context
         mapboxToken = token
         this.locationEngine = locationEngine
         validateAccessToken(mapboxToken)
         initializer = postInitialize // prevent primaryInitializer() from being called more than once.
+        gpsEventFactory = InitialGpsEventFactory(metricsReporter)
         postEventDelegate = postEventAfterInit // now that the object has been initialized we can post events
         registerForNotification(mapboxNavigation)
+        mapboxTelemetry = telemetry
+        mapboxTelemetry.enable()
         monitorChannels()
-        telemetry.enable()
         channelOnRouteProgress.offer(RouteProgress.Builder().build()) // initially offer an empty route progress so that non-driving telemetry events (like user feedback) can be processed
-
         /**
          * Register a callback to receive location events. At most [LOCATION_BUFFER_MAX_SIZE] are stored
          */
@@ -121,15 +148,57 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
         true
     }
     private var initializer = primaryInitializer
-    private var postInitialize: (Context, String, MapboxNavigation, LocationEngine, MapboxTelemetry, LocationEngineRequest) -> Boolean = { _, _, _, _, _, _ -> false }
+    private var postInitialize: (Context, String, MapboxNavigation, LocationEngine, MapboxTelemetry, LocationEngineRequest, MetricsReporter) -> Boolean = { _, _, _, _, _, _, _ -> false }
     fun initialize(
         context: Context,
         mapboxToken: String,
         mapboxNavigation: MapboxNavigation,
         locationEngine: LocationEngine,
         telemetry: MapboxTelemetry,
-        locationEngineRequest: LocationEngineRequest
-    ) = initializer(context, mapboxToken, mapboxNavigation, locationEngine, telemetry, locationEngineRequest)
+        locationEngineRequest: LocationEngineRequest,
+        metricsReporter: MetricsReporter = MapboxMetricsReporter
+    ) = initializer(context, mapboxToken, mapboxNavigation, locationEngine, telemetry, locationEngineRequest, metricsReporter)
+
+    fun startSession(
+        directionsRoute: DirectionsRoute,
+        locationEngineName: LocationEngine
+    ) {
+        // Expected session == SESSION_END
+        sessionControl.compareAndSet(SessionState.SESSION_END, SessionState.SESSION_START).let { previousSessionState ->
+            when (previousSessionState) {
+                true -> {
+                    sessionStartHelper(directionsRoute, locationEngineName)
+                }
+                false -> {
+                    endSession()
+                    sessionStartHelper(directionsRoute, locationEngineName)
+                    MapboxLogger.e(Message("sessionEnd() not called. Calling it by default"))
+                }
+            }
+        }
+    }
+
+    fun endSession() {
+        sessionControl.compareAndSet(SessionState.SESSION_START, SessionState.SESSION_END).let { previousSessionState ->
+            when (previousSessionState) {
+                true -> {
+                    sessionEndHelper()
+                }
+                false -> {
+                    // Do nothing. A session cannot be ended twice and calling it multiple times has not detrimental effects
+                }
+            }
+        }
+    }
+
+    fun updateSessionRoute(directionsRoute: DirectionsRoute) {
+    }
+
+    fun updateLocationEngineNameAndSimulation(locationEngine: LocationEngine?) {
+    }
+
+    fun updateLocation(context: Context, location: Location) {
+    }
 
     @TestOnly
     fun pauseTelemetry(flag: Boolean) {
@@ -142,10 +211,11 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
             }
         }
     }
+
     @TestOnly
-    suspend fun dumpTelemetryJsonPayloadAsync(): Deferred<String> {
+    suspend fun dumpTelemetryJsonPayloadAsync(scope: CoroutineScope): Deferred<String> {
         val result = CompletableDeferred<String>()
-        jobControl.scope.monitorChannelWithException(channelTelemetryEvent, predicate = { event ->
+        scope.monitorChannelWithException(channelTelemetryEvent, predicate = { event ->
             result.complete(Gson().toJson(event))
         })
 
@@ -156,18 +226,36 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
      * This method is used to post all types of telemetry events to the back-end server.
      * The [event] parameter represents one of several Telemetry events available
      */
-    override fun postTelemetryEvent(event: TelemetryEventInterface) {
+    override fun postTelemetryEvent(event: TelemetryEvent) {
         postEventDelegate(event)
     }
 
-    private fun postEvent(event: TelemetryEventInterface) {
+    private fun sessionStartHelper(
+        directionsRoute: DirectionsRoute,
+        locationEngineName: LocationEngine
+    ) {
+        /**
+         * SessionData(val sessionId:String,
+        val tripId:String,
+        val directionsRoute: DirectionsRoute,
+        val requestId: String,
+        var currentDirectionsRoute: DirectionsRoute,
+        var eventRouteDistanceCompleted: Float,
+        var rerouteCount:Int = 0)
+         */
+        sessionData = SessionData(TelemetryUtils.obtainUniversalUniqueIdentifier(),
+                TelemetryUtils.obtainUniversalUniqueIdentifier(),
+                directionsRoute,
+                TelemetryUtils.obtainUniversalUniqueIdentifier(),
+                directionsRoute,
+                0.0F,
+                0)
+    }
+
+    private fun sessionEndHelper() {
         jobControl.scope.launch {
-            withContext(ThreadController.IODispatcher) {
-                val data = populateTelemetryEventWrapper(event)
-                data
-            }?.let { telemetryEvent ->
-                sendEvent(telemetryEvent)
-                telemetryEvent
+            for (event in channelEventQueue) {
+                mapboxTelemetry.push(event.toTelemetryEvent())
             }
         }
     }
@@ -233,29 +321,6 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
         return retVal.toTypedArray()
     }
 
-    private suspend fun parseRouteProgress(): TelemetryStep {
-        return TelemetryStep().apply {
-            val routeProgress = channelOnRouteProgress.receive().also { routeProgress ->
-                distanceRemaining = routeProgress.distanceRemaining().toInt()
-                durationRemaining = routeProgress.durationRemaining().toInt()
-            }
-
-            ifNonNull(routeProgress.currentLegProgress()?.upcomingStep()) { upcomingStep ->
-                distance = upcomingStep.distance().toInt()
-                duration = upcomingStep.duration().toInt()
-                upcomingType = upcomingStep.maneuver().type() ?: ""
-                upcomingModifier = upcomingStep.maneuver().modifier() ?: ""
-                upcomingName = upcomingStep.name() ?: ""
-            }
-
-            ifNonNull(routeProgress.currentLegProgress()?.currentStepProgress()?.step()) { currentStep ->
-                previousModifier = currentStep.maneuver().modifier() ?: ""
-                previousName = currentStep.name() ?: ""
-                previousType = currentStep.maneuver().type() ?: ""
-            }
-        }
-    }
-
     /**
      * This method delays sending the event to the server for the duration specified by [delayPeriod]. Once
      * the [delayPeriod] expires, the lambda is executed. This allows the location buffer to be populated
@@ -266,37 +331,10 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
         return predicate()
     }
 
-    /**
-     * TODO:OZ add one of these for each telemetry event
-     * Generates a well-formed Feedback event.
-     */
-    private suspend fun populateUserFeedbackEvent(event: TelemetryEventFeedback): MetricEvent =
-            delayPostEvent(TWENTY_SECOND_INTERVAL) {
-                TelemetryUserFeedbackWrapper(event,
-                        TelemetryUtils.retrieveVendorId(),
-                        NavigationUtils.obtainAudioType(context),
-                        getDatePartitionedLocations { location -> location.time < Time.SystemImpl.millis() },
-                        getDatePartitionedLocations { location -> location.time > Time.SystemImpl.millis() },
-                        UUID.randomUUID().toString(),
-                        event.screenShot,
-                        parseRouteProgress()
-                ).toMetricEvent()
-            }
-
-    /**
-     * TODO:OZ add code to handle all other event types. Once implemented, instead of throwing an exception the code
-     * should log an error
-     */
-    private suspend fun populateTelemetryEventWrapper(event: TelemetryEventInterface): MetricEvent? =
-            when (event) {
-                is TelemetryEventFeedback -> populateUserFeedbackEvent(event)
-                else -> throw(NavigationException("Unsupported telemetry event"))
-            }
-
     private fun validateAccessToken(accessToken: String?) {
         if (accessToken.isNullOrEmpty() ||
                 (!accessToken.toLowerCase(Locale.US).startsWith("pk.") &&
-                !accessToken.toLowerCase(Locale.US).startsWith("sk."))
+                        !accessToken.toLowerCase(Locale.US).startsWith("sk."))
         ) {
             throw NavigationException("A valid access token must be passed in when first initializing MapboxNavigation")
         }

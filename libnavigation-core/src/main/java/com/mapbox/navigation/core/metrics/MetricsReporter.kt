@@ -1,4 +1,4 @@
-package com.mapbox.navigation.base.metrics
+package com.mapbox.navigation.core.metrics
 
 /**
  * Defines API for handling metric events.
@@ -10,14 +10,14 @@ interface MetricsReporter {
      *
      * @param metricEvent event that should be handled
      */
-    fun addEvent(metricEvent: MetricEvent)
+    fun addEvent(metricEvent: com.mapbox.navigation.core.metrics.MetricEvent)
 
     /**
      * Adds an observer that will be triggered when a metric event is handled
      *
      * @param metricsObserver the [MetricsObserver] that is called when a new metric event is triggered
      */
-    fun setMetricsObserver(metricsObserver: MetricsObserver)
+    fun setMetricsObserver(metricsObserver: com.mapbox.navigation.core.metrics.MetricsObserver)
 
     /**
      * Remove metrics observer
