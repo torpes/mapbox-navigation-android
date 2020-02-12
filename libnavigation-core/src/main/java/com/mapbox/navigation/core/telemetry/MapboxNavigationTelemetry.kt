@@ -7,6 +7,7 @@ import com.mapbox.android.core.location.LocationEngine
 import com.mapbox.android.core.location.LocationEngineCallback
 import com.mapbox.android.core.location.LocationEngineRequest
 import com.mapbox.android.core.location.LocationEngineResult
+import com.mapbox.android.telemetry.AppUserTurnstile
 import com.mapbox.android.telemetry.MapboxTelemetry
 import com.mapbox.android.telemetry.TelemetryUtils
 import com.mapbox.api.directions.v5.models.DirectionsRoute
@@ -14,6 +15,7 @@ import com.mapbox.navigation.base.extensions.ifNonNull
 import com.mapbox.navigation.base.logger.model.Message
 import com.mapbox.navigation.base.logger.model.Tag
 import com.mapbox.navigation.base.trip.model.RouteProgress
+import com.mapbox.navigation.core.BuildConfig
 import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.core.metrics.MapboxMetricsReporter
 import com.mapbox.navigation.core.metrics.MetricEvent
@@ -51,10 +53,9 @@ private data class LocationBufferControl(val command: LocationBufferCommands, va
 internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
     private lateinit var context: Context
     private lateinit var mapboxToken: String
-
     private val TAG = Tag("MAPBOX_TELEMETRY")
     private const val LOCATION_BUFFER_MAX_SIZE = 40
-    private const val TWENTY_SECOND_INTERVAL = 20000L
+    private const val MAPBOX_NAVIGATION_SDK_IDENTIFIER = "mapbox-navigation-android"
     private var sessionId = ""
     private var tripId = ""
     private val jobControl = ThreadController.getIOScopeAndRootJob()
@@ -63,6 +64,7 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
     private val channelLocationBuffer = Channel<LocationBufferControl>(LOCATION_BUFFER_MAX_SIZE)
     private val channelOnRouteProgress = Channel<RouteProgress>(Channel.CONFLATED) // we want just the last notification
     private val channelTelemetryEvent = Channel<MetricEvent>(Channel.CONFLATED) // used in testing to sample the events sent to the server
+    private var metricsReporter: MetricsReporter = MapboxMetricsReporter
 
     private lateinit var cleanupJob: Job
     private lateinit var locationEngine: LocationEngine
@@ -145,6 +147,7 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
          * Register a callback to receive location events. At most [LOCATION_BUFFER_MAX_SIZE] are stored
          */
         locationEngine.requestLocationUpdates(locationEngineRequest, locationCallback, null)
+        postTurnstileEvent()
         true
     }
     private var initializer = primaryInitializer
@@ -230,19 +233,15 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
         postEventDelegate(event)
     }
 
+    private fun postTurnstileEvent() {
+        val appUserTurnstileEvent = AppUserTurnstile(MAPBOX_NAVIGATION_SDK_IDENTIFIER, BuildConfig.MAPBOX_NAVIGATION_VERSION_NAME) // TODO:OZ obtain the SDK identifier from MapboxNavigation
+        val event = NavigationAppUserTurnstileEvent(appUserTurnstileEvent)
+        metricsReporter.addEvent(event)
+    }
     private fun sessionStartHelper(
         directionsRoute: DirectionsRoute,
         locationEngineName: LocationEngine
     ) {
-        /**
-         * SessionData(val sessionId:String,
-        val tripId:String,
-        val directionsRoute: DirectionsRoute,
-        val requestId: String,
-        var currentDirectionsRoute: DirectionsRoute,
-        var eventRouteDistanceCompleted: Float,
-        var rerouteCount:Int = 0)
-         */
         sessionData = SessionData(TelemetryUtils.obtainUniversalUniqueIdentifier(),
                 TelemetryUtils.obtainUniversalUniqueIdentifier(),
                 directionsRoute,
