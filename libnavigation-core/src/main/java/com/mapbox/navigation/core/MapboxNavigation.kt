@@ -28,6 +28,7 @@ import com.mapbox.navigation.core.accounts.MapboxNavigationAccounts
 import com.mapbox.navigation.core.directions.session.DirectionsSession
 import com.mapbox.navigation.core.directions.session.RoutesObserver
 import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
+import com.mapbox.navigation.core.metrics.MapboxMetricsReporter
 import com.mapbox.navigation.core.module.NavigationModuleProvider
 import com.mapbox.navigation.core.telemetry.MapboxNavigationTelemetry
 import com.mapbox.navigation.core.trip.service.TripService
@@ -163,7 +164,8 @@ class MapboxNavigation(
                     this,
                     locationEngine,
                     MapboxTelemetry(context, token, obtainUserAgent()),
-                    locationEngineRequest)
+                    locationEngineRequest,
+                    MapboxMetricsReporter(context, token, obtainUserAgent()))
         }
     }
 

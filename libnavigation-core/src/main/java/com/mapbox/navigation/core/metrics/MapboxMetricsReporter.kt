@@ -11,7 +11,11 @@ import kotlinx.coroutines.launch
 /**
  * Default implementation of [MetricsReporter] interface.
  */
-object MapboxMetricsReporter : MetricsReporter {
+class MapboxMetricsReporter(
+    private val context: Context,
+    private val accessToken: String,
+    private val userAgent: String
+) : MetricsReporter {
 
     private val gson = Gson()
     private lateinit var mapboxTelemetry: MapboxTelemetry
@@ -26,23 +30,8 @@ object MapboxMetricsReporter : MetricsReporter {
      * @param accessToken Mapbox access token
      * @param userAgent Use agent indicate source of metrics
      */
-    @JvmStatic
-    fun init(
-        context: Context,
-        accessToken: String,
-        userAgent: String
-    ) {
+    fun init() {
         mapboxTelemetry = MapboxTelemetry(context, accessToken, userAgent)
-        mapboxTelemetry.enable()
-    }
-
-    // For test purposes only
-    internal fun init(
-        mapboxTelemetry: MapboxTelemetry,
-        threadController: ThreadController
-    ) {
-        MapboxMetricsReporter.mapboxTelemetry = mapboxTelemetry
-        ioJobController = threadController.getMainScopeAndRootJob()
         mapboxTelemetry.enable()
     }
 
@@ -51,7 +40,6 @@ object MapboxMetricsReporter : MetricsReporter {
      *
      * @param isDebugLoggingEnabled true to enable logging, false to disable logging
      */
-    @JvmStatic
     fun toggleLogging(isDebugLoggingEnabled: Boolean) {
         mapboxTelemetry.updateDebugLoggingEnabled(isDebugLoggingEnabled)
     }
@@ -78,7 +66,7 @@ object MapboxMetricsReporter : MetricsReporter {
     }
 
     override fun setMetricsObserver(metricsObserver: MetricsObserver) {
-        MapboxMetricsReporter.metricsObserver = metricsObserver
+        this.metricsObserver = metricsObserver
     }
 
     override fun removeObserver() {

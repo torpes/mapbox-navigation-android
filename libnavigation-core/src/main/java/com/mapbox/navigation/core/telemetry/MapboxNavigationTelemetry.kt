@@ -17,7 +17,6 @@ import com.mapbox.navigation.base.logger.model.Tag
 import com.mapbox.navigation.base.trip.model.RouteProgress
 import com.mapbox.navigation.core.BuildConfig
 import com.mapbox.navigation.core.MapboxNavigation
-import com.mapbox.navigation.core.metrics.MapboxMetricsReporter
 import com.mapbox.navigation.core.metrics.MetricEvent
 import com.mapbox.navigation.core.metrics.MetricsReporter
 import com.mapbox.navigation.core.metrics.toTelemetryEvent
@@ -64,7 +63,7 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
     private val channelLocationBuffer = Channel<LocationBufferControl>(LOCATION_BUFFER_MAX_SIZE)
     private val channelOnRouteProgress = Channel<RouteProgress>(Channel.CONFLATED) // we want just the last notification
     private val channelTelemetryEvent = Channel<MetricEvent>(Channel.CONFLATED) // used in testing to sample the events sent to the server
-    private var metricsReporter: MetricsReporter = MapboxMetricsReporter
+    private lateinit var metricsReporter: MetricsReporter
 
     private lateinit var cleanupJob: Job
     private lateinit var locationEngine: LocationEngine
@@ -135,6 +134,7 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
         mapboxToken = token
         this.locationEngine = locationEngine
         validateAccessToken(mapboxToken)
+        this.metricsReporter = metricsReporter
         initializer = postInitialize // prevent primaryInitializer() from being called more than once.
         gpsEventFactory = InitialGpsEventFactory(metricsReporter)
         postEventDelegate = postEventAfterInit // now that the object has been initialized we can post events
@@ -159,7 +159,7 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
         locationEngine: LocationEngine,
         telemetry: MapboxTelemetry,
         locationEngineRequest: LocationEngineRequest,
-        metricsReporter: MetricsReporter = MapboxMetricsReporter
+        metricsReporter: MetricsReporter
     ) = initializer(context, mapboxToken, mapboxNavigation, locationEngine, telemetry, locationEngineRequest, metricsReporter)
 
     fun startSession(
