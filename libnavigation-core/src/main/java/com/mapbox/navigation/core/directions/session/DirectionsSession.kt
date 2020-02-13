@@ -5,19 +5,19 @@ import com.mapbox.api.directions.v5.models.RouteOptions
 
 internal interface DirectionsSession {
 
-    fun getRoutes(): List<DirectionsRoute>
+    var routes: List<DirectionsRoute>
 
     fun getRouteOptions(): RouteOptions?
 
-    fun requestRoutes(routeOptions: RouteOptions)
+    fun requestRoutes(routeOptions: RouteOptions, routesRequestCallback: RoutesRequestCallback)
 
     fun cancel()
 
-    fun registerRouteObserver(routeObserver: RouteObserver)
+    fun registerRoutesObserver(routesObserver: RoutesObserver)
 
-    fun unregisterRouteObserver(routeObserver: RouteObserver)
+    fun unregisterRoutesObserver(routesObserver: RoutesObserver)
 
     fun shutDownSession()
 
-    fun unregisterAllRouteObservers()
+    fun unregisterAllRoutesObservers()
 }

@@ -3,7 +3,17 @@ package com.mapbox.navigation.examples.activity
 import android.annotation.SuppressLint
 import android.location.Location
 import android.os.Bundle
+import android.os.Looper
+import android.view.View.GONE
+import android.view.View.VISIBLE
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.mapbox.android.core.location.LocationEngine
+import com.mapbox.android.core.location.LocationEngineCallback
+import com.mapbox.android.core.location.LocationEngineProvider
+import com.mapbox.android.core.location.LocationEngineRequest
+import com.mapbox.android.core.location.LocationEngineResult
+import com.mapbox.api.directions.v5.DirectionsCriteria
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.mapboxsdk.annotations.IconFactory
@@ -20,23 +30,30 @@ import com.mapbox.navigation.base.extensions.applyDefaultParams
 import com.mapbox.navigation.base.extensions.coordinates
 import com.mapbox.navigation.base.trip.model.RouteProgress
 import com.mapbox.navigation.core.MapboxNavigation
-import com.mapbox.navigation.core.directions.session.RouteObserver
+import com.mapbox.navigation.core.directions.session.RoutesObserver
+import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
 import com.mapbox.navigation.core.trip.session.LocationObserver
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
+import com.mapbox.navigation.core.trip.session.TripSessionStateObserver
 import com.mapbox.navigation.examples.R
 import com.mapbox.navigation.examples.utils.Utils
 import com.mapbox.navigation.examples.utils.extensions.toPoint
 import com.mapbox.services.android.navigation.ui.v5.route.NavigationMapRoute
-import kotlinx.android.synthetic.main.activity_trip_service.*
+import java.lang.ref.WeakReference
+import kotlinx.android.synthetic.main.activity_simple_mapbox_navigation.*
+import kotlinx.android.synthetic.main.activity_trip_service.mapView
 import timber.log.Timber
 
 class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
 
+    private val locationEngineCallback = MyLocationEngineCallback(this)
     private var mapboxMap: MapboxMap? = null
     private var navigationMapRoute: NavigationMapRoute? = null
     private lateinit var mapboxNavigation: MapboxNavigation
     private var locationComponent: LocationComponent? = null
     private var symbolManager: SymbolManager? = null
+
+    private lateinit var localLocationEngine: LocationEngine
 
     @SuppressLint("MissingPermission")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,8 +62,11 @@ class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
 
         mapView.onCreate(savedInstanceState)
         mapView.getMapAsync(this)
+        localLocationEngine = LocationEngineProvider.getBestLocationEngine(applicationContext)
         mapboxNavigation = MapboxNavigation(applicationContext, Utils.getMapboxAccessToken(this))
-        mapboxNavigation.startTripSession()
+        startNavigation.setOnClickListener {
+            mapboxNavigation.startTripSession()
+        }
     }
 
     override fun onMapReady(mapboxMap: MapboxMap) {
@@ -59,7 +79,10 @@ class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
                     RouteOptions.builder().applyDefaultParams()
                         .accessToken(Utils.getMapboxAccessToken(applicationContext))
                         .coordinates(location.toPoint(), null, click.toPoint())
-                        .build()
+                        .alternatives(true)
+                        .profile(DirectionsCriteria.PROFILE_DRIVING_TRAFFIC)
+                        .build(),
+                    routesReqCallback
                 )
 
                 symbolManager?.deleteAll()
@@ -72,10 +95,10 @@ class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
             false
         }
 
-        mapboxMap.setStyle(Style.MAPBOX_STREETS) {
+        mapboxMap.setStyle(Style.MAPBOX_STREETS) { style ->
             locationComponent = mapboxMap.locationComponent.apply {
                 activateLocationComponent(
-                    LocationComponentActivationOptions.builder(this@SimpleMapboxNavigationKt, it)
+                    LocationComponentActivationOptions.builder(this@SimpleMapboxNavigationKt, style)
                         .useDefaultLocationEngine(false)
                         .build()
                 )
@@ -84,41 +107,101 @@ class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
             }
 
             navigationMapRoute = NavigationMapRoute(mapView, mapboxMap)
-            symbolManager = SymbolManager(mapView, mapboxMap, it)
-            it.addImage("marker", IconFactory.getInstance(this).defaultMarker().bitmap)
+            navigationMapRoute?.setOnRouteSelectionChangeListener { route ->
+                mapboxNavigation.setRoutes(mapboxNavigation.getRoutes().toMutableList().apply {
+                    remove(route)
+                    add(0, route)
+                })
+            }
+
+            symbolManager = SymbolManager(mapView, mapboxMap, style)
+            style.addImage("marker", IconFactory.getInstance(this).defaultMarker().bitmap)
         }
     }
 
     private val locationObserver = object : LocationObserver {
         override fun onRawLocationChanged(rawLocation: Location) {
-            locationComponent?.forceLocationUpdate(rawLocation)
-            Timber.e("raw location %s", rawLocation.toString())
+            Timber.d("raw location %s", rawLocation.toString())
         }
 
-        override fun onEnhancedLocationChanged(enhancedLocation: Location) {
-            Timber.e("enhanced location %s", enhancedLocation.toString())
+        override fun onEnhancedLocationChanged(
+            enhancedLocation: Location,
+            keyPoints: List<Location>
+        ) {
+            if (keyPoints.isNotEmpty()) {
+                locationComponent?.forceLocationUpdate(keyPoints, true)
+            } else {
+                locationComponent?.forceLocationUpdate(enhancedLocation)
+            }
+            Timber.d("enhanced location %s", enhancedLocation)
+            Timber.d("enhanced keyPoints %s", keyPoints)
         }
+    }
+
+    private fun startLocationUpdates() {
+        val request = LocationEngineRequest.Builder(1000L)
+            .setFastestInterval(500L)
+            .setPriority(LocationEngineRequest.PRIORITY_HIGH_ACCURACY)
+            .build()
+        try {
+            localLocationEngine.requestLocationUpdates(
+                request,
+                locationEngineCallback,
+                Looper.getMainLooper()
+            )
+            localLocationEngine.getLastLocation(locationEngineCallback)
+        } catch (exception: SecurityException) {
+            Timber.e(exception)
+        }
+    }
+
+    private fun stopLocationUpdates() {
+        localLocationEngine.removeLocationUpdates(locationEngineCallback)
     }
 
     private val routeProgressObserver = object : RouteProgressObserver {
         override fun onRouteProgressChanged(routeProgress: RouteProgress) {
-            Timber.e("route progress %s", routeProgress.toString())
+            Timber.d("route progress %s", routeProgress.toString())
         }
     }
 
-    private val routeObserver = object : RouteObserver {
+    private val routesObserver = object : RoutesObserver {
         override fun onRoutesChanged(routes: List<DirectionsRoute>) {
-            navigationMapRoute?.addRoute(routes[0])
-            Timber.e("route changed %s", routes.toString())
+            navigationMapRoute?.addRoutes(routes)
+            if (routes.isEmpty()) {
+                Toast.makeText(this@SimpleMapboxNavigationKt, "Empty routes", Toast.LENGTH_SHORT)
+                    .show()
+            }
+            Timber.d("route changed %s", routes.toString())
+        }
+    }
+
+    private val routesReqCallback = object : RoutesRequestCallback {
+        override fun onRoutesReady(routes: List<DirectionsRoute>): List<DirectionsRoute> {
+            Timber.d("route request success %s", routes.toString())
+            return routes
         }
 
-        override fun onRoutesRequested() {
-            Timber.e("route requested")
-        }
-
-        override fun onRoutesRequestFailure(throwable: Throwable) {
+        override fun onRoutesRequestFailure(throwable: Throwable, routeOptions: RouteOptions) {
             symbolManager?.deleteAll()
             Timber.e("route request failure %s", throwable.toString())
+        }
+
+        override fun onRoutesRequestCanceled(routeOptions: RouteOptions) {
+            symbolManager?.deleteAll()
+            Timber.d("route request canceled")
+        }
+    }
+
+    private val tripSessionStateObserver = object : TripSessionStateObserver {
+        override fun onSessionStarted() {
+            stopLocationUpdates()
+            startNavigation.visibility = GONE
+        }
+
+        override fun onSessionStopped() {
+            startLocationUpdates()
+            startNavigation.visibility = VISIBLE
         }
     }
 
@@ -137,7 +220,8 @@ class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
         mapView.onStart()
         mapboxNavigation.registerLocationObserver(locationObserver)
         mapboxNavigation.registerRouteProgressObserver(routeProgressObserver)
-        mapboxNavigation.registerRouteObserver(routeObserver)
+        mapboxNavigation.registerRoutesObserver(routesObserver)
+        mapboxNavigation.registerTripSessionStateObserver(tripSessionStateObserver)
     }
 
     override fun onStop() {
@@ -145,7 +229,9 @@ class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
         mapView.onStop()
         mapboxNavigation.unregisterLocationObserver(locationObserver)
         mapboxNavigation.unregisterRouteProgressObserver(routeProgressObserver)
-        mapboxNavigation.unregisterRouteObserver(routeObserver)
+        mapboxNavigation.unregisterRoutesObserver(routesObserver)
+        mapboxNavigation.unregisterTripSessionStateObserver(tripSessionStateObserver)
+        stopLocationUpdates()
     }
 
     override fun onLowMemory() {
@@ -163,5 +249,20 @@ class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         mapView.onSaveInstanceState(outState)
+    }
+
+    private class MyLocationEngineCallback(activity: SimpleMapboxNavigationKt) :
+        LocationEngineCallback<LocationEngineResult> {
+
+        private val activityRef = WeakReference(activity)
+
+        override fun onSuccess(result: LocationEngineResult?) {
+            result?.locations?.firstOrNull()?.let {
+                activityRef.get()?.locationComponent?.forceLocationUpdate(it)
+            }
+        }
+
+        override fun onFailure(exception: Exception) {
+        }
     }
 }

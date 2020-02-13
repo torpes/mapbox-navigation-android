@@ -3,10 +3,11 @@ package com.mapbox.navigation.core
 import android.content.Context
 import com.mapbox.api.directions.v5.models.DirectionsRoute
 import com.mapbox.navigation.core.accounts.MapboxNavigationAccounts
-import com.mapbox.navigation.core.directions.session.RouteObserver
+import com.mapbox.navigation.core.directions.session.RoutesObserver
 import com.mapbox.navigation.core.trip.session.TripSessionStateObserver
 
-internal class NavigationSession(private val context: Context) : RouteObserver, TripSessionStateObserver {
+internal class NavigationSession(private val context: Context) : RoutesObserver,
+    TripSessionStateObserver {
 
     private var state = State.IDLE
         set(value) {
@@ -54,14 +55,6 @@ internal class NavigationSession(private val context: Context) : RouteObserver, 
 
     override fun onRoutesChanged(routes: List<DirectionsRoute>) {
         hasRoutes = routes.isNotEmpty()
-    }
-
-    override fun onRoutesRequested() {
-        hasRoutes = false
-    }
-
-    override fun onRoutesRequestFailure(throwable: Throwable) {
-        hasRoutes = false
     }
 
     override fun onSessionStarted() {

@@ -9,14 +9,13 @@ import com.mapbox.android.accounts.v1.AccountsConstants.KEY_META_DATA_MANAGE_SKU
 internal class Billing private constructor() {
 
     enum class BillingModel {
-        TRIPS,
+        NO_SKU,
         MAU
     }
 
     companion object {
-        private var INSTANCE: Billing? = null
-        private var billingType =
-            BillingModel.TRIPS
+        internal var INSTANCE: Billing? = null
+        private var billingType = BillingModel.MAU
 
         fun getInstance(context: Context): Billing =
                 INSTANCE ?: synchronized(this) {
@@ -40,7 +39,7 @@ internal class Billing private constructor() {
         private fun setBillingType(context: Context) {
             billingType = when (getApplicationInfo(context)?.metaData
                     ?.getBoolean(KEY_META_DATA_MANAGE_SKU, DEFAULT_TOKEN_MANAGE_SKU)) {
-                true -> BillingModel.TRIPS
+                true -> BillingModel.NO_SKU
                 else -> BillingModel.MAU
             }
         }
