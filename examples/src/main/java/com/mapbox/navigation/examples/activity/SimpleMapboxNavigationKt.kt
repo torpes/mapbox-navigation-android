@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.location.Location
 import android.os.Bundle
 import android.os.CountDownTimer
+import android.os.Environment
 import android.os.Looper
 import android.view.View
 import android.view.View.GONE
@@ -31,7 +32,15 @@ import com.mapbox.mapboxsdk.plugins.annotation.SymbolManager
 import com.mapbox.mapboxsdk.plugins.annotation.SymbolOptions
 import com.mapbox.navigation.base.extensions.applyDefaultParams
 import com.mapbox.navigation.base.extensions.coordinates
+import com.mapbox.navigation.base.options.DEFAULT_NAVIGATOR_POLLING_DELAY
+import com.mapbox.navigation.base.options.Endpoint
+import com.mapbox.navigation.base.options.MapboxOnboardRouterConfig
+import com.mapbox.navigation.base.options.NavigationOptions
 import com.mapbox.navigation.base.trip.model.RouteProgress
+import com.mapbox.navigation.base.typedef.NONE_SPECIFIED
+import com.mapbox.navigation.base.typedef.ROUNDING_INCREMENT_FIFTY
+import com.mapbox.navigation.base.typedef.UNDEFINED
+import com.mapbox.navigation.core.MapboxDistanceFormatter
 import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.core.directions.session.RoutesObserver
 import com.mapbox.navigation.core.directions.session.RoutesRequestCallback
@@ -48,6 +57,7 @@ import kotlinx.android.synthetic.main.activity_trip_service.mapView
 import kotlinx.android.synthetic.main.bottom_sheet_faster_route.*
 import kotlinx.android.synthetic.main.content_simple_mapbox_navigation.*
 import timber.log.Timber
+import java.io.File
 
 class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
 
@@ -75,7 +85,38 @@ class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
         mapView.onCreate(savedInstanceState)
         mapView.getMapAsync(this)
         localLocationEngine = LocationEngineProvider.getBestLocationEngine(applicationContext)
-        mapboxNavigation = MapboxNavigation(applicationContext, Utils.getMapboxAccessToken(this))
+
+        val file = File(
+                Environment.getExternalStoragePublicDirectory("Offline").absolutePath,
+                "2019_04_13-00_00_11"
+        )
+        val fileTiles = File(file, "tiles")
+        val config = MapboxOnboardRouterConfig(
+                fileTiles.absolutePath,
+                null,
+                null,
+                null,
+                Endpoint(
+                        "https://api-routing-tiles-staging.tilestream.net",
+                        "2019_04_13-00_00_11",
+                        Utils.getMapboxAccessToken(this),
+                        "MapboxNavigationNative"
+                )
+        )
+
+        val navigationOptions = NavigationOptions.Builder(
+                NONE_SPECIFIED,
+                ROUNDING_INCREMENT_FIFTY,
+                DEFAULT_NAVIGATOR_POLLING_DELAY,
+                MapboxDistanceFormatter(
+                        applicationContext,
+                        null,
+                        UNDEFINED,
+                        ROUNDING_INCREMENT_FIFTY
+                ),
+                config).build()
+
+        mapboxNavigation = MapboxNavigation(applicationContext, Utils.getMapboxAccessToken(this), navigationOptions)
     }
 
     override fun onMapReady(mapboxMap: MapboxMap) {

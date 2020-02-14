@@ -14,6 +14,7 @@ import com.mapbox.geojson.Point
 import com.mapbox.navigation.base.accounts.SkuTokenProvider
 import com.mapbox.navigation.base.extensions.bearings
 import com.mapbox.navigation.base.extensions.ifNonNull
+import com.mapbox.navigation.base.logger.Logger
 import com.mapbox.navigation.base.options.DEFAULT_NAVIGATOR_POLLING_DELAY
 import com.mapbox.navigation.base.options.MapboxOnboardRouterConfig
 import com.mapbox.navigation.base.options.NavigationOptions
@@ -118,12 +119,19 @@ class MapboxNavigation constructor(
 
     init {
         ThreadController.init()
+//        directionsSession = NavigationComponentProvider.createDirectionsSession(
+//            NavigationModuleProvider.createModule(
+//                MapboxNavigationModuleType.OffboardRouter,
+//                ::paramsProvider
+//            )
+//        )
         directionsSession = NavigationComponentProvider.createDirectionsSession(
-            NavigationModuleProvider.createModule(
-                MapboxNavigationModuleType.OffboardRouter,
-                ::paramsProvider
-            )
+                NavigationModuleProvider.createModule(
+                        MapboxNavigationModuleType.OnboardRouter,
+                        ::paramsProvider
+                )
         )
+
         directionsSession.registerRoutesObserver(internalRoutesObserver)
         directionsSession.registerRoutesObserver(navigationSession)
 
@@ -493,7 +501,10 @@ class MapboxNavigation constructor(
                 Context::class.java to context,
                 SkuTokenProvider::class.java to MapboxNavigationAccounts.getInstance(context)
             )
-            MapboxNavigationModuleType.OnboardRouter -> arrayOf()
+            MapboxNavigationModuleType.OnboardRouter -> arrayOf(
+                    MapboxOnboardRouterConfig::class.java to navigationOptions.onboardRouterConfig(),
+                    Logger::class.java to null
+            )
             MapboxNavigationModuleType.DirectionsSession -> throw NotImplementedError() // going to be removed when next base version
             MapboxNavigationModuleType.TripNotification -> arrayOf(
                 Context::class.java to context.applicationContext,
