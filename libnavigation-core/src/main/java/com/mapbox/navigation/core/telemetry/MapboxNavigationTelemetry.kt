@@ -8,6 +8,7 @@ import com.mapbox.android.core.location.LocationEngineCallback
 import com.mapbox.android.core.location.LocationEngineRequest
 import com.mapbox.android.core.location.LocationEngineResult
 import com.mapbox.android.telemetry.AppUserTurnstile
+import com.mapbox.android.telemetry.Event
 import com.mapbox.android.telemetry.MapboxTelemetry
 import com.mapbox.android.telemetry.TelemetryUtils
 import com.mapbox.api.directions.v5.models.DirectionsRoute
@@ -15,16 +16,19 @@ import com.mapbox.navigation.base.extensions.ifNonNull
 import com.mapbox.navigation.base.logger.model.Message
 import com.mapbox.navigation.base.logger.model.Tag
 import com.mapbox.navigation.base.trip.model.RouteProgress
+import com.mapbox.navigation.base.trip.model.RouteProgressState
 import com.mapbox.navigation.core.BuildConfig
 import com.mapbox.navigation.core.MapboxNavigation
 import com.mapbox.navigation.core.metrics.MetricEvent
 import com.mapbox.navigation.core.metrics.MetricsReporter
-import com.mapbox.navigation.core.metrics.toTelemetryEvent
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
 import com.mapbox.navigation.logger.MapboxLogger
 import com.mapbox.navigation.utils.exceptions.NavigationException
 import com.mapbox.navigation.utils.thread.ThreadController
+import com.mapbox.navigation.utils.thread.ifChannelException
 import com.mapbox.navigation.utils.thread.monitorChannelWithException
+import com.mapbox.navigation.utils.time.Time
+import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
@@ -55,13 +59,14 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
     private val TAG = Tag("MAPBOX_TELEMETRY")
     private const val LOCATION_BUFFER_MAX_SIZE = 40
     private const val MAPBOX_NAVIGATION_SDK_IDENTIFIER = "mapbox-navigation-android"
-    private var sessionId = ""
-    private var tripId = ""
+    private const val MOCK_PROVIDER = "com.mapbox.services.android.navigation.v5.location.replay.ReplayRouteLocationEngine"
+
+    private val sessionState = SessionState()
     private val jobControl = ThreadController.getIOScopeAndRootJob()
     private val locationBuffer = mutableListOf<Location>()
-    private val channelEventQueue = Channel<MetricEvent>(Channel.UNLIMITED)
+    private val channelEventQueue = Channel<Event>(Channel.UNLIMITED)
     private val channelLocationBuffer = Channel<LocationBufferControl>(LOCATION_BUFFER_MAX_SIZE)
-    private val channelOnRouteProgress = Channel<RouteProgress>(Channel.CONFLATED) // we want just the last notification
+    private val channelOnRouteProgress = Channel<RouteProgressWithTimeStamp>(Channel.CONFLATED) // we want just the last notification
     private val channelTelemetryEvent = Channel<MetricEvent>(Channel.CONFLATED) // used in testing to sample the events sent to the server
     private lateinit var metricsReporter: MetricsReporter
 
@@ -70,27 +75,19 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
     private lateinit var mapboxTelemetry: MapboxTelemetry
 
     private lateinit var gpsEventFactory: InitialGpsEventFactory
-    private val sessionControl: AtomicReference<SessionState> = AtomicReference(SessionState.SESSION_END)
-    private data class SessionData(
-        val sessionId: String,
-        val tripId: String,
-        val directionsRoute: DirectionsRoute,
-        val requestId: String,
-        var currentDirectionsRoute: DirectionsRoute,
-        var eventRouteDistanceCompleted: Float,
-        var rerouteCount: Int = 0
-    )
+    private val CURRENT_SESSION_CONTROL: AtomicReference<CurrentSessionState> = AtomicReference(CurrentSessionState.SESSION_END)
 
-    private enum class SessionState {
+    private enum class CurrentSessionState {
         SESSION_START,
         SESSION_END
     }
-    private var sessionState: SessionState = SessionState.SESSION_END
-    private var sessionData: SessionData? = null
+
+    private data class RouteProgressWithTimeStamp(val date: Long, val routeProgress: RouteProgress)
+
     // Call back that receives
     private val routeProgressListener = object : RouteProgressObserver {
         override fun onRouteProgressChanged(routeProgress: RouteProgress) {
-            channelOnRouteProgress.offer(routeProgress)
+            channelOnRouteProgress.offer(RouteProgressWithTimeStamp(Time.SystemImpl.millis(), routeProgress))
         }
     }
 
@@ -142,7 +139,7 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
         mapboxTelemetry = telemetry
         mapboxTelemetry.enable()
         monitorChannels()
-        channelOnRouteProgress.offer(RouteProgress.Builder().build()) // initially offer an empty route progress so that non-driving telemetry events (like user feedback) can be processed
+        channelOnRouteProgress.offer(RouteProgressWithTimeStamp(Time.SystemImpl.millis(), RouteProgress.Builder().build())) // initially offer an empty route progress so that non-driving telemetry events (like user feedback) can be processed
         /**
          * Register a callback to receive location events. At most [LOCATION_BUFFER_MAX_SIZE] are stored
          */
@@ -162,12 +159,16 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
         metricsReporter: MetricsReporter
     ) = initializer(context, mapboxToken, mapboxNavigation, locationEngine, telemetry, locationEngineRequest, metricsReporter)
 
+    /**
+     * This method starts a unique telemetry session as defined in [SessionState]. startSession/endSession calls are expected to be
+     * issued in pairs. To enforce this behavior calling startSession() will terminate the previous session.
+     */
     fun startSession(
         directionsRoute: DirectionsRoute,
         locationEngineName: LocationEngine
     ) {
         // Expected session == SESSION_END
-        sessionControl.compareAndSet(SessionState.SESSION_END, SessionState.SESSION_START).let { previousSessionState ->
+        CURRENT_SESSION_CONTROL.compareAndSet(CurrentSessionState.SESSION_END, CurrentSessionState.SESSION_START).let { previousSessionState ->
             when (previousSessionState) {
                 true -> {
                     sessionStartHelper(directionsRoute, locationEngineName)
@@ -181,8 +182,11 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
         }
     }
 
+    /**
+     * This method terminates the current session. The call is idempotent.
+     */
     fun endSession() {
-        sessionControl.compareAndSet(SessionState.SESSION_START, SessionState.SESSION_END).let { previousSessionState ->
+        CURRENT_SESSION_CONTROL.compareAndSet(CurrentSessionState.SESSION_START, CurrentSessionState.SESSION_END).let { previousSessionState ->
             when (previousSessionState) {
                 true -> {
                     sessionEndHelper()
@@ -192,15 +196,6 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
                 }
             }
         }
-    }
-
-    fun updateSessionRoute(directionsRoute: DirectionsRoute) {
-    }
-
-    fun updateLocationEngineNameAndSimulation(locationEngine: LocationEngine?) {
-    }
-
-    fun updateLocation(context: Context, location: Location) {
     }
 
     @TestOnly
@@ -234,27 +229,66 @@ internal object MapboxNavigationTelemetry : MapboxNavigationTelemetryInterface {
     }
 
     private fun postTurnstileEvent() {
+        // AppUserTurnstile is implemented in mapbox-telemetry-sdk
         val appUserTurnstileEvent = AppUserTurnstile(MAPBOX_NAVIGATION_SDK_IDENTIFIER, BuildConfig.MAPBOX_NAVIGATION_VERSION_NAME) // TODO:OZ obtain the SDK identifier from MapboxNavigation
         val event = NavigationAppUserTurnstileEvent(appUserTurnstileEvent)
         metricsReporter.addEvent(event)
     }
+
+    /**
+     * This method starts a session. The start of a session does not result in a telemetry event being sent to the servers.
+     * It is only the initialization of the [SessionState] object with two UUIDs
+     */
     private fun sessionStartHelper(
         directionsRoute: DirectionsRoute,
-        locationEngineName: LocationEngine
+        locationEngine: LocationEngine
     ) {
-        sessionData = SessionData(TelemetryUtils.obtainUniversalUniqueIdentifier(),
-                TelemetryUtils.obtainUniversalUniqueIdentifier(),
-                directionsRoute,
-                TelemetryUtils.obtainUniversalUniqueIdentifier(),
-                directionsRoute,
-                0.0F,
-                0)
+        jobControl.scope.launch {
+            // Initialize identifiers unique to this session
+            sessionState.apply {
+                sessionIdentifier = TelemetryUtils.obtainUniversalUniqueIdentifier()
+                tripIdentifier = TelemetryUtils.obtainUniversalUniqueIdentifier()
+            }
+            val session = updateSessionState(directionsRoute, locationEngine)
+        }
+    }
+
+    private suspend fun updateSessionState(directionsRoute: DirectionsRoute, locationEngine: LocationEngine): SessionState {
+        sessionState.apply {
+            originalDirectionRoute = directionsRoute
+            originalRequestIdentifier = directionsRoute.routeOptions()?.requestUuid()
+            requestIdentifier = directionsRoute.routeOptions()?.requestUuid()
+            currentDirectionRoute = directionsRoute
+            eventRouteDistanceCompleted = 0.0
+            rerouteCount = 0
+            locationEngineName = locationEngine.javaClass.name
+            mockLocation = locationEngineName == MOCK_PROVIDER
+        }
+        try {
+            channelOnRouteProgress.receive().also { routeProgressDescriptor ->
+                routeProgressDescriptor.routeProgress.currentState()?.let { progressState ->
+                    when (progressState) {
+                        RouteProgressState.ROUTE_ARRIVED -> {
+                            sessionState.arrivalTimestamp = Date(routeProgressDescriptor.date)
+                        }
+                        else -> {
+                            // Do nothing.
+                        }
+                    }
+                }
+            }
+        } catch (e: java.lang.Exception) {
+            e.ifChannelException {
+                // Should not be here. This channel is never closed
+            }
+        }
+        return sessionState
     }
 
     private fun sessionEndHelper() {
         jobControl.scope.launch {
             for (event in channelEventQueue) {
-                mapboxTelemetry.push(event.toTelemetryEvent())
+                mapboxTelemetry.push(event)
             }
         }
     }

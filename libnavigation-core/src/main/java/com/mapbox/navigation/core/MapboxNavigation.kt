@@ -159,6 +159,7 @@ class MapboxNavigation(
         tripSession.registerOffRouteObserver(internalOffRouteObserver)
         tripSession.registerStateObserver(navigationSession)
         ifNonNull(accessToken) { token ->
+            // Initialize telemetry. This will cause a turnstile event to be sent to the back end servers
             MapboxNavigationTelemetry.initialize(context.applicationContext,
                     token,
                     this,
