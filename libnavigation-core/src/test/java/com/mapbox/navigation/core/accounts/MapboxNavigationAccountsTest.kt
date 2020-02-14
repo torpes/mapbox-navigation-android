@@ -12,6 +12,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.lang.IllegalStateException
+
 
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
@@ -22,7 +24,7 @@ class MapboxNavigationAccountsTest {
     @Before
     fun setUp() {
         ctx.applicationInfo.metaData = Bundle().also {
-            it.putBoolean(AccountsConstants.KEY_META_DATA_MANAGE_SKU, true)
+            it.putBoolean(AccountsConstants.KEY_META_DATA_MANAGE_SKU, false)
         }
 
         ctx.getSharedPreferences(
@@ -43,43 +45,24 @@ class MapboxNavigationAccountsTest {
         ctx.applicationInfo.metaData = null
     }
 
-    @Test
-    fun obtainSkuToken_when_resourceUrl_null() {
-        val instance = MapboxNavigationAccounts.getInstance(ctx)
-
-        val result = instance.obtainSkuToken(null, 4)
-
-        assertNotNull(result)
-    }
-
-    @Test
+    @Test(expected = IllegalStateException::class)
     fun obtainSkuToken_when_resourceUrl_empty() {
         val instance = MapboxNavigationAccounts.getInstance(ctx)
 
-        val result = instance.obtainSkuToken("", 4)
+        val result = instance.obtainUrlWithSkuToken("", 4)
 
-        assertEquals("myTestToken", result)
+        assertEquals("", result)
     }
 
-    @Test
+    @Test(expected = IllegalStateException::class)
     fun obtainSkuToken_when_resourceUrl_notNullOrEmpty_and_querySize_lessThan_zero() {
         val instance = MapboxNavigationAccounts.getInstance(ctx)
 
-        val result = instance.obtainSkuToken("http://www.mapbox.com", -1)
-
-        assertEquals("myTestToken", result)
+        instance.obtainUrlWithSkuToken("http://www.mapbox.com", -1)
     }
 
-    @Test
-    fun obtainSkuToken_when_resourceUrl_notNullOrEmpty_and_BillingModel_TRIPS() {
-        val ctx = ApplicationProvider.getApplicationContext<Context>()
-        val instance = MapboxNavigationAccounts.getInstance(ctx)
-
-        val result = instance.obtainSkuToken("http://www.mapbox.com", 5)
-
-        assertEquals("http://www.mapbox.com&sku=myTestToken", result)
-    }
-
+    // this test could be improved if the SkuGenerator wasn't using System.currentTimeMillis()
+    // and instead used Instant.now or LocalDateTime.now as a clock could be used for unit testing.
     @Test
     fun obtainSkuToken_when_resourceUrl_notNullOrEmpty_and_BillingModel_MAU() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
@@ -88,18 +71,20 @@ class MapboxNavigationAccountsTest {
         }
         val instance = MapboxNavigationAccounts.getInstance(ctx)
 
-        val result = instance.obtainSkuToken("http://www.mapbox.com", 5)
+        val result = instance.obtainUrlWithSkuToken("http://www.mapbox.com", 5)
 
-        assertEquals("http://www.mapbox.com&sku=myTestToken", result)
+        assertNotNull(result.substringAfterLast(""))
     }
 
+    // this test could be improved if the SkuGenerator wasn't using System.currentTimeMillis()
+    // and instead used Instant.now or LocalDateTime.now as a clock could be used for unit testing.
     @Test
     fun obtainSkuToken_when_resourceUrl_notNullOrEmpty_and_BillingModel_default() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val instance = MapboxNavigationAccounts.getInstance(ctx)
 
-        val result = instance.obtainSkuToken("http://www.mapbox.com", 5)
+        val result = instance.obtainUrlWithSkuToken("http://www.mapbox.com", 5)
 
-        assertEquals("http://www.mapbox.com&sku=myTestToken", result)
+        assertNotNull(result.substringAfterLast(""))
     }
 }
