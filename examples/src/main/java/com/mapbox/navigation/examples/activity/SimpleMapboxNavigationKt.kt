@@ -10,6 +10,7 @@ import android.view.View.GONE
 import android.view.View.VISIBLE
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.ViewModelProviders
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.mapbox.android.core.location.LocationEngine
 import com.mapbox.android.core.location.LocationEngineCallback
@@ -40,14 +41,15 @@ import com.mapbox.navigation.core.trip.session.LocationObserver
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
 import com.mapbox.navigation.core.trip.session.TripSessionStateObserver
 import com.mapbox.navigation.examples.R
+import com.mapbox.navigation.examples.sensors.SensorEventViewModel
 import com.mapbox.navigation.examples.utils.Utils
 import com.mapbox.navigation.examples.utils.extensions.toPoint
 import com.mapbox.services.android.navigation.ui.v5.route.NavigationMapRoute
-import java.lang.ref.WeakReference
 import kotlinx.android.synthetic.main.activity_trip_service.mapView
 import kotlinx.android.synthetic.main.bottom_sheet_faster_route.*
 import kotlinx.android.synthetic.main.content_simple_mapbox_navigation.*
 import timber.log.Timber
+import java.lang.ref.WeakReference
 
 class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
 
@@ -64,6 +66,7 @@ class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var mapboxNavigation: MapboxNavigation
     private lateinit var localLocationEngine: LocationEngine
+    private lateinit var sensorEventViewModel: SensorEventViewModel
     private lateinit var bottomSheetBehavior: BottomSheetBehavior<View>
 
     @SuppressLint("MissingPermission")
@@ -71,11 +74,16 @@ class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_simple_mapbox_navigation)
 
+        Timber.i("location_debug SimpleMapboxNavigationKt")
         initViews()
         mapView.onCreate(savedInstanceState)
         mapView.getMapAsync(this)
         localLocationEngine = LocationEngineProvider.getBestLocationEngine(applicationContext)
         mapboxNavigation = MapboxNavigation(applicationContext, Utils.getMapboxAccessToken(this))
+        sensorEventViewModel = ViewModelProviders.of(this).get(SensorEventViewModel::class.java)
+        sensorEventViewModel.externalEmitter = { sensorEvent ->
+            mapboxNavigation.updateSensorEvent(sensorEvent)
+        }
     }
 
     override fun onMapReady(mapboxMap: MapboxMap) {

@@ -1,5 +1,6 @@
 package com.mapbox.navigation.core.trip.session
 
+import android.hardware.SensorEvent
 import android.location.Location
 import android.os.Looper
 import android.util.Log
@@ -221,6 +222,10 @@ class MapboxTripSession(
 
     override fun unregisterAllVoiceInstructionsObservers() {
         voiceInstructionsObservers.clear()
+    }
+
+    override fun updateSensorEvent(sensorEvent: SensorEvent) {
+        navigator.updateSensorEvent(sensorEvent)
     }
 
     private var locationEngineCallback = object : LocationEngineCallback<LocationEngineResult> {
