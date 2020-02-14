@@ -82,6 +82,7 @@ class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
         mapboxNavigation = MapboxNavigation(applicationContext, Utils.getMapboxAccessToken(this))
         sensorEventViewModel = ViewModelProviders.of(this).get(SensorEventViewModel::class.java)
         sensorEventViewModel.externalEmitter = { sensorEvent ->
+            Timber.i("location_debug update sensor event: ${sensorEvent.sensor.name} ${sensorEvent.values.joinToString()}")
             mapboxNavigation.updateSensorEvent(sensorEvent)
         }
     }
