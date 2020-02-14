@@ -22,18 +22,19 @@ class SensorEventViewModel(
     }
     var externalEmitter : (SensorEvent) -> Unit = { }
 
-
     init {
+        Timber.i("location_debug register sensors")
         val sensorList = sensorManager.getSensorList(TYPE_ALL).filterNotNull()
         for (sensor in sensorList) {
+            Timber.i("location_debug register sensor ${sensor.name}")
             val sensorListener = SensorListener(emitter)
             sensorEventListeners.add(sensorListener)
-            sensorManager.registerListener(sensorListener, sensor, toSamplingPeriodUs(100))
+            sensorManager.registerListener(sensorListener, sensor, 0)
         }
     }
 
     override fun onCleared() {
-        Timber.i("location_debug unregister")
+        Timber.i("location_debug unregister listeners")
         for (sensorListener in sensorEventListeners) {
             sensorManager.unregisterListener(sensorListener)
         }
