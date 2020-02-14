@@ -12,8 +12,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import java.lang.IllegalStateException
-
 
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
@@ -61,8 +59,6 @@ class MapboxNavigationAccountsTest {
         instance.obtainUrlWithSkuToken("http://www.mapbox.com", -1)
     }
 
-    // this test could be improved if the SkuGenerator wasn't using System.currentTimeMillis()
-    // and instead used Instant.now or LocalDateTime.now as a clock could be used for unit testing.
     @Test
     fun obtainSkuToken_when_resourceUrl_notNullOrEmpty_and_BillingModel_MAU() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
@@ -76,8 +72,6 @@ class MapboxNavigationAccountsTest {
         assertNotNull(result.substringAfterLast(""))
     }
 
-    // this test could be improved if the SkuGenerator wasn't using System.currentTimeMillis()
-    // and instead used Instant.now or LocalDateTime.now as a clock could be used for unit testing.
     @Test
     fun obtainSkuToken_when_resourceUrl_notNullOrEmpty_and_BillingModel_default() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
