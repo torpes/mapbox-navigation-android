@@ -2,7 +2,6 @@ package com.mapbox.navigation.navigator
 
 import android.hardware.SensorEvent
 import android.os.Build
-import android.util.Log
 import com.mapbox.navigator.Axes3D
 import com.mapbox.navigator.SensorData
 import java.time.Instant
@@ -48,12 +47,12 @@ internal fun SensorEvent.toSensorData(): SensorData? {
 
 
 fun SensorEvent.toSensorData3d(): SensorData {
-    Log.i("location_debug", " emit values ${values.size} ${sensor.name} ${values.joinToString()}")
+//    Log.i("location_debug", " emit values ${values.size} ${sensor.name} ${values.joinToString()}")
     val data: Axes3D? = when (values.size) {
         3 -> Axes3D(this.values[0], this.values[1], this.values[2])
         1 -> Axes3D(this.values[0], 0.0f, 0.0f)
         else -> {
-            Log.i("location_debug", "Could not transform ${sensor.name} with ${values.size} values as ${values.joinToString()}")
+//            Log.i("location_debug", "Could not transform ${sensor.name} with ${values.size} values as ${values.joinToString()}")
             null
         }
     }

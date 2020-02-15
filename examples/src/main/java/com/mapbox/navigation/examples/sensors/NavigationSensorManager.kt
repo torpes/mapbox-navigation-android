@@ -17,7 +17,7 @@ class NavigationSensorManager(
         val sensorList = sensorManager.getSensorList(Sensor.TYPE_ALL).filterNotNull()
         for (sensor in sensorList) {
             Timber.i("location_debug register sensor $sensor ")
-            sensorManager.registerListener(this, sensor, toSamplingPeriodUs(1))
+            sensorManager.registerListener(this, sensor, toSamplingPeriodUs(10))
         }
     }
 

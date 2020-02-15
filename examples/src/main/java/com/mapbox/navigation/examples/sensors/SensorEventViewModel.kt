@@ -5,6 +5,7 @@ import android.content.Context
 import android.hardware.SensorEvent
 import android.hardware.SensorManager
 import androidx.lifecycle.AndroidViewModel
+import com.mapbox.mapboxsdk.location.CompassEngine
 import timber.log.Timber
 
 class SensorEventViewModel(
@@ -12,6 +13,7 @@ class SensorEventViewModel(
 ) : AndroidViewModel(application) {
 
     private val sensorManager = application.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private val turnSensor = TurnSensor()
     private val navigationSensorManager = NavigationSensorManager(sensorManager)
 
     var eventEmitter: ((SensorEvent) -> Unit) = { }
@@ -19,6 +21,7 @@ class SensorEventViewModel(
     init {
         Timber.i("location_debug register sensors")
         navigationSensorManager.start { event ->
+            turnSensor.update(event)
             eventEmitter.invoke(event)
         }
     }
