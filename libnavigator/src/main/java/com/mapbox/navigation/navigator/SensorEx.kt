@@ -9,7 +9,18 @@ import java.util.*
 import java.util.concurrent.TimeUnit
 
 internal fun SensorEvent.toSensorData(): SensorData? {
-    return this.toSensorData3d()
+    //    Log.i("location_debug", " emit values ${values.size} ${sensor.name} ${values.joinToString()}")
+    val data: Axes3D? = when (values.size) {
+        3 -> Axes3D(this.values[0], this.values[1], this.values[2])
+        1 -> Axes3D(this.values[0], 0.0f, 0.0f)
+        else -> {
+//            Log.i("location_debug", "Could not transform ${sensor.name} with ${values.size} values as ${values.joinToString()}")
+            null
+        }
+    }
+    return SensorData(null, null,
+        this.toTime(), data,
+        null)
 //    return when (this.sensor.type) {
 //        Sensor.TYPE_ACCELEROMETER -> this.toSensorData3d()
 //        Sensor.TYPE_ACCELEROMETER_UNCALIBRATED -> this.toSensorData3d()
@@ -45,22 +56,12 @@ internal fun SensorEvent.toSensorData(): SensorData? {
 //    }
 }
 
-
 fun SensorEvent.toSensorData3d(): SensorData {
-//    Log.i("location_debug", " emit values ${values.size} ${sensor.name} ${values.joinToString()}")
-    val data: Axes3D? = when (values.size) {
-        3 -> Axes3D(this.values[0], this.values[1], this.values[2])
-        1 -> Axes3D(this.values[0], 0.0f, 0.0f)
-        else -> {
-//            Log.i("location_debug", "Could not transform ${sensor.name} with ${values.size} values as ${values.joinToString()}")
-            null
-        }
-    }
     return SensorData(
             null,
             null,
             this.toTime(),
-            data,
+            Axes3D(this.values[0], this.values[1], this.values[2]),
             null)
 }
 

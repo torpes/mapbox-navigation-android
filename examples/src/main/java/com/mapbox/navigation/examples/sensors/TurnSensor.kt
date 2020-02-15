@@ -3,17 +3,22 @@ package com.mapbox.navigation.examples.sensors
 import android.hardware.Sensor.TYPE_GRAVITY
 import android.hardware.Sensor.TYPE_GYROSCOPE
 import android.hardware.SensorEvent
+import timber.log.Timber
+import kotlin.math.PI
 import kotlin.math.sqrt
 
 class TurnSensor {
-
-    var turnRadians = 0.0
 
     private var lastTurnSample = 0.0f
     private var lastTimeNanos = 0L
 
     private val gravity = FloatArray(3)
     private val gyro = FloatArray(3)
+
+    var turnRadians = 0.0
+    fun turnDegrees(): Double {
+        return (turnRadians * 180.0 / PI + 360.0) % 360.0
+    }
 
     fun update(event: SensorEvent) {
         when (event.sensor.type) {
@@ -31,6 +36,7 @@ class TurnSensor {
     private fun updateGyroscope(gyroEvent: SensorEvent) {
         val gravityMagnitude = magnitude(gravity)
         if (gravityMagnitude < 0.1) {
+            Timber.i("location_debug guarding update gryo")
             // guard against initialization and free falls
             return
         }
@@ -66,5 +72,10 @@ class TurnSensor {
         val y = vector3d[1]
         val z = vector3d[2]
         return sqrt(x*x + y*y + z*z)
+    }
+
+    fun Double.toNormalizedRadians(): Double {
+        val twoPi = PI * 2.0
+        return (this * PI / 180.0 + twoPi) % twoPi
     }
 }

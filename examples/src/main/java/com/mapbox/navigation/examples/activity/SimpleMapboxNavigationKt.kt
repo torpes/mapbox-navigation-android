@@ -84,6 +84,9 @@ class SimpleMapboxNavigationKt : AppCompatActivity(), OnMapReadyCallback {
         sensorEventViewModel.eventEmitter = { sensorEvent ->
             mapboxNavigation.updateSensorEvent(sensorEvent)
         }
+        sensorEventViewModel.observeTurnDegrees(this) {
+            Timber.i("location_debug what is this $it")
+        }
     }
 
     override fun onMapReady(mapboxMap: MapboxMap) {
