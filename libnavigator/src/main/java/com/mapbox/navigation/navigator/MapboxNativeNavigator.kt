@@ -72,4 +72,6 @@ interface MapboxNativeNavigator {
     // Other
 
     fun getVoiceInstruction(index: Int, callback: (VoiceInstruction?) -> Unit)
+
+    fun shutdown()
 }

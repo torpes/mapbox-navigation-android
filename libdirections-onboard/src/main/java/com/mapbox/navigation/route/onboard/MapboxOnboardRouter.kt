@@ -129,6 +129,11 @@ class MapboxOnboardRouter : Router {
         mainJobControl.job.cancelChildren()
     }
 
+    override fun shutdown() {
+        cancel()
+        navigatorNative.shutdown()
+    }
+
     private fun retrieveRoute(url: String, callback: Router.Callback) {
         // mainJobControl.scope.launch {
             try {
