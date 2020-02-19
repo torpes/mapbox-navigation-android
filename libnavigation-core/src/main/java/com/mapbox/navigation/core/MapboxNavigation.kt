@@ -100,7 +100,6 @@ class MapboxNavigation constructor(
     private val context: Context,
     private val accessToken: String?,
     private val navigationOptions: NavigationOptions = defaultNavigationOptions(context),
-    private val navigatorNative: MapboxNativeNavigator = MapboxNativeNavigatorImpl(),
     locationEngine: LocationEngine = LocationEngineProvider.getBestLocationEngine(context.applicationContext),
     locationEngineRequest: LocationEngineRequest = LocationEngineRequest.Builder(1000L)
         .setPriority(LocationEngineRequest.PRIORITY_HIGH_ACCURACY)
@@ -256,6 +255,7 @@ class MapboxNavigation constructor(
         ThreadController.cancelAllUICoroutines()
         directionsSession.shutDownSession()
         directionsSession.unregisterAllRoutesObservers()
+        tripSession.shutdown()
         tripSession.unregisterAllLocationObservers()
         tripSession.unregisterAllRouteProgressObservers()
         tripSession.unregisterAllOffRouteObservers()
@@ -268,21 +268,28 @@ class MapboxNavigation constructor(
      * API used to retrieve logged location and route progress samples for debug purposes.
      */
     fun retrieveHistory(): String {
-        return navigatorNative.getHistory()
+        val navigatorNative = MapboxNativeNavigatorImpl()
+        val history = navigatorNative.getHistory()
+        navigatorNative.shutdown()
+        return history
     }
 
     /**
      * API used to enable/disable location and route progress samples logs for debug purposes.
      */
     fun toggleHistory(isEnabled: Boolean) {
+        val navigatorNative = MapboxNativeNavigatorImpl()
         navigatorNative.toggleHistory(isEnabled)
+        navigatorNative.shutdown()
     }
 
     /**
      * API used to artificially add debug events to logs.
      */
     fun addHistoryEvent(eventType: String, eventJsonProperties: String) {
+        val navigatorNative = MapboxNativeNavigatorImpl()
         navigatorNative.addHistoryEvent(eventType, eventJsonProperties)
+        navigatorNative.shutdown()
     }
 
     /**

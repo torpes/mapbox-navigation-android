@@ -20,6 +20,7 @@ internal interface TripSession {
 
     fun start()
     fun stop()
+    fun shutdown()
 
     fun registerLocationObserver(locationObserver: LocationObserver)
     fun unregisterLocationObserver(locationObserver: LocationObserver)
